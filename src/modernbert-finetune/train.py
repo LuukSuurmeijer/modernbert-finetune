@@ -38,9 +38,7 @@ eval_size_ratio = 0.05
 total_save_limit = 2
 
 effective_batch_size = per_device_train_batch_size * gradient_accumulation_steps
-total_steps_per_epoch = math.ceil(
-    estimated_dataset_size_in_rows / effective_batch_size
-)
+total_steps_per_epoch = math.ceil(estimated_dataset_size_in_rows / effective_batch_size)
 total_train_steps = total_steps_per_epoch * num_train_epochs
 eval_size_per_chunk = int(100_000 * eval_size_ratio)
 
@@ -57,13 +55,18 @@ else:
 if FLASH_ATTENTION:
     try:
         import flash_attn
+
         print("FlashAttention is already installed.")
     except ImportError:
         print("FlashAttention is not installed. Installing...")
         try:
             import subprocess
-            subprocess.run(["pip", "install", "flash-attn", "--no-build-isolation"], check=True)
+
+            subprocess.run(
+                ["pip", "install", "flash-attn", "--no-build-isolation"], check=True
+            )
             import flash_attn
+
             print("FlashAttention installed successfully.")
         except Exception as e:
             print(f"Error installing FlashAttention: {e}")
@@ -72,6 +75,7 @@ if FLASH_ATTENTION:
 # --- Flash-attn Integration Check ---
 try:
     from flash_attn.flash_attention import FlashAttention
+
     print("FlashAttention is available.")
     flash_attn_available = True
 except ImportError:
@@ -97,15 +101,20 @@ wandb.init(
 print(f"Loading model and tokenizer from {model_checkpoint}...")
 
 # Check if custom tokenizer exists, otherwise use default
-if os.path.exists(tokenizer_path) and any(fname.startswith('spm') for fname in os.listdir(tokenizer_path)):
+if os.path.exists(tokenizer_path) and any(
+    fname.startswith("spm") for fname in os.listdir(tokenizer_path)
+):
     print(f"Loading custom SentencePiece tokenizer from {tokenizer_path}...")
     from transformers import AutoTokenizer
+
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
     # Add the pad_token if it's not already in the tokenizer
     if tokenizer.pad_token is None:
-        tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+        tokenizer.add_special_tokens({"pad_token": "[PAD]"})
         model.resize_token_embeddings(len(tokenizer))
-elif os.path.exists(tokenizer_path) and os.path.isfile(os.path.join(tokenizer_path, "tokenizer.json")):
+elif os.path.exists(tokenizer_path) and os.path.isfile(
+    os.path.join(tokenizer_path, "tokenizer.json")
+):
     print(f"Loading custom tokenizer from {tokenizer_path}...")
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
 else:
@@ -115,9 +124,7 @@ else:
     )
 
 print(f"Loading model config from {model_checkpoint}...")
-config = AutoConfig.from_pretrained(
-    model_checkpoint, use_auth_token=huggingface_token
-)
+config = AutoConfig.from_pretrained(model_checkpoint, use_auth_token=huggingface_token)
 config.torch_dtype = "float16"
 print(f"Model config loaded and modified: {config}")
 
@@ -144,6 +151,7 @@ dataset = load_dataset(
 )
 print("Dataset loaded.")
 
+
 # --- Tokenization Function ---
 def tokenize_function(examples):
     return tokenizer(
@@ -151,6 +159,7 @@ def tokenize_function(examples):
         # No truncation and max_length to allow dynamic padding truncation=True, max_length=chunk_size, padding="longest",
         return_special_tokens_mask=True,
     )
+
 
 # --- Tokenize Dataset ---
 print("Tokenizing dataset...")
@@ -196,7 +205,8 @@ scheduler = get_linear_schedule_with_warmup(
 )
 
 # --- AMP scaler for mixed precision ---
-scaler = torch.amp.GradScaler('cuda', enabled=(device.type == "cuda"))
+scaler = torch.amp.GradScaler("cuda", enabled=(device.type == "cuda"))
+
 
 # --- Helper Function to Fix Batch Inputs ---
 def fix_batch_inputs(inputs: dict) -> dict:
@@ -217,6 +227,7 @@ def fix_batch_inputs(inputs: dict) -> dict:
         inputs["input_ids"] = inputs["input_ids"].long()
     return inputs
 
+
 # --- Forward Pass Function ---
 def forward_pass(model, inputs):
     """
@@ -225,11 +236,12 @@ def forward_pass(model, inputs):
     """
     inputs = fix_batch_inputs(inputs)
     inputs = {k: v.to(device) for k, v in inputs.items()}
-    with torch.amp.autocast('cuda', enabled=(device.type == "cuda")):
+    with torch.amp.autocast("cuda", enabled=(device.type == "cuda")):
         outputs = model(**inputs, return_dict=True)
     if outputs.loss is None:
         raise ValueError("Model did not return a loss.")
     return outputs.loss
+
 
 # --- Evaluation Function ---
 def evaluate(model, eval_dataset, data_collator):
@@ -241,8 +253,9 @@ def evaluate(model, eval_dataset, data_collator):
     losses = []
     eval_iterator = eval_dataset.iter(batch_size=per_device_train_batch_size)
     for batch in tqdm(eval_iterator, desc="Evaluating"):
-        with torch.no_grad(), torch.amp.autocast('cuda',
-            enabled=(device.type == "cuda")
+        with (
+            torch.no_grad(),
+            torch.amp.autocast("cuda", enabled=(device.type == "cuda")),
         ):
             inputs = data_collator(batch)
             try:
@@ -255,6 +268,7 @@ def evaluate(model, eval_dataset, data_collator):
     average_loss = sum(losses) / len(losses) if losses else float("inf")
     return average_loss
 
+
 # --- Dynamic Padding Data Collator ---
 class DynamicPaddingDataCollator(DataCollatorForLanguageModeling):
     """
@@ -265,7 +279,7 @@ class DynamicPaddingDataCollator(DataCollatorForLanguageModeling):
 
     def __call__(self, examples: Dict[str, Any]) -> Dict[str, torch.Tensor]:
         # Find the maximum length within the current batch
-        max_length = max(len(input_ids) for input_ids in examples['input_ids'])
+        max_length = max(len(input_ids) for input_ids in examples["input_ids"])
 
         # Pad or truncate each example to the max_length
         batch = []
@@ -286,12 +300,15 @@ class DynamicPaddingDataCollator(DataCollatorForLanguageModeling):
             batch.append({"input_ids": ids, "attention_mask": mask})
 
         # Apply the rest of the data collation logic (MLM masking, etc.)
-        batch = self.torch_call(batch)  # Use torch_call instead of __call__ to call the parent's method
+        batch = self.torch_call(
+            batch
+        )  # Use torch_call instead of __call__ to call the parent's method
 
         # Ensure correct shapes and dtypes
         batch = fix_batch_inputs(batch)
 
         return batch
+
 
 # --- Training Function with Curriculum Learning ---
 def train_with_curriculum(mlm_probabilities, chunk_size_dataset):
@@ -312,9 +329,7 @@ def train_with_curriculum(mlm_probabilities, chunk_size_dataset):
             )
 
             train_dataset = (
-                tokenized_dataset.skip(
-                    i * chunk_size_dataset + eval_size_per_chunk
-                )
+                tokenized_dataset.skip(i * chunk_size_dataset + eval_size_per_chunk)
                 .take(chunk_size_dataset)
                 .shuffle(seed=42, buffer_size=10_000)
             )
@@ -372,11 +387,10 @@ def train_with_curriculum(mlm_probabilities, chunk_size_dataset):
     )
     print("Final model saved and pushed.")
 
+
 # --- Define MLM Probabilities and Chunk Sizes ---
 masking_probabilities = [0.3, 0.2, 0.18, 0.16, 0.14]
-chunk_size_dataset = estimated_dataset_size_in_rows // len(
-    masking_probabilities
-)
+chunk_size_dataset = estimated_dataset_size_in_rows // len(masking_probabilities)
 
 # --- Start Training ---
 try:

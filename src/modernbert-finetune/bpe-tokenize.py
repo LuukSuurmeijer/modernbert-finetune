@@ -18,7 +18,10 @@ BATCH_SIZE = 1000
 
 # --- Tokenizer Training ---
 
-def train_tokenizer(dataset_iterator, vocab_size=VOCAB_SIZE, save_path=TOKENIZER_SAVE_PATH):
+
+def train_tokenizer(
+    dataset_iterator, vocab_size=VOCAB_SIZE, save_path=TOKENIZER_SAVE_PATH
+):
     """
     Trains a WordPiece tokenizer on a streaming dataset.
 
@@ -33,17 +36,22 @@ def train_tokenizer(dataset_iterator, vocab_size=VOCAB_SIZE, save_path=TOKENIZER
     trainer = WordPieceTrainer(
         vocab_size=vocab_size,
         special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"],
-        min_frequency=2
+        min_frequency=2,
     )
 
     def batch_iterator(batch_size=BATCH_SIZE):
         for i in range(0, NUM_EXAMPLES_TO_TRAIN, batch_size):
-            yield [item["content"] for item in islice(dataset_iterator, i, i + batch_size)]
+            yield [
+                item["content"] for item in islice(dataset_iterator, i, i + batch_size)
+            ]
 
-    tokenizer.train_from_iterator(batch_iterator(), trainer=trainer, length=NUM_EXAMPLES_TO_TRAIN)
+    tokenizer.train_from_iterator(
+        batch_iterator(), trainer=trainer, length=NUM_EXAMPLES_TO_TRAIN
+    )
     tokenizer.save(os.path.join(save_path, "tokenizer.json"))
     print(f"Tokenizer trained and saved to {save_path}")
     return tokenizer
+
 
 # --- Main Execution ---
 
