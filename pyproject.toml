@@ -1,0 +1,28 @@
+[project]
+name = "modernbert-finetune"
+version = "0.1.0"
+description = ""
+authors = [{ name = "Luuk Suurmeijer", email = "luuksuurmeijer@gmail.com" }]
+requires-python = ">=3.9"
+readme = "README.md"
+dependencies = [
+    "transformers (>=4.53.1,<5.0.0)",
+    "torch (>=2.7.1,<3.0.0)",
+    "torch-adopt (>=0.1.0,<0.2.0)",
+    "wandb (>=0.21.0,<0.22.0)",
+    "datasets (>=3.6.0,<4.0.0)",
+    "huggingface-hub (>=0.33.2,<0.34.0)",
+    "sentencepiece (>=0.2.0,<0.3.0)",
+    "pyyaml",
+    "dotenv"
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = ["ruff>=0.12.2,<0.13"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["modernbert_finetune"]

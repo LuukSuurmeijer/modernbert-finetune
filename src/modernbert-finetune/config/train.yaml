@@ -1,0 +1,15 @@
+model_checkpoint: "answerdotai/ModernBERT-base"
+dataset_name: "ssmits/fineweb-2-dutch"
+num_train_epochs: 1
+per_device_train_batch_size: 4
+gradient_accumulation_steps: 2
+eval_size_ratio: 0.05
+masking_probabilities: [0.3, 0.2, 0.18, 0.16, 0.14]
+estimated_dataset_size_in_rows: 86500000
+username: "ssmits"
+total_save_limit: 2
+push_interval: 100000
+eval_size_per_chunk: 5000
+learning_rate: 5e-4
+weight_decay: 0.01
+tokenizer_path: "domain_tokenizer"
