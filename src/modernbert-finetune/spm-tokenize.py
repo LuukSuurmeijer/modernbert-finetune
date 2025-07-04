@@ -1,6 +1,7 @@
-from sentencepiece import SentencePieceTrainer
-from datasets import load_dataset
 import os
+
+from datasets import load_dataset
+from sentencepiece import SentencePieceTrainer
 
 # --- Configuration ---
 DATASET_NAME = "ssmits/fineweb-2-dutch"
@@ -12,7 +13,13 @@ BATCH_SIZE = 1000
 
 # --- SPM Tokenizer Training ---
 
-def train_tokenizer(dataset_iterator, vocab_size=VOCAB_SIZE, save_path=TOKENIZER_SAVE_PATH, model_type=MODEL_TYPE):
+
+def train_tokenizer(
+    dataset_iterator,
+    vocab_size=VOCAB_SIZE,
+    save_path=TOKENIZER_SAVE_PATH,
+    model_type=MODEL_TYPE,
+):
     """
     Trains a SentencePiece tokenizer on a streaming dataset.
 
@@ -34,17 +41,17 @@ def train_tokenizer(dataset_iterator, vocab_size=VOCAB_SIZE, save_path=TOKENIZER
     # Define SPM training arguments
     spm_train_args = [
         f"--input={temp_file}",
-        f"--model_prefix=spm",  # Output model name prefix
+        "--model_prefix=spm",  # Output model name prefix
         f"--vocab_size={vocab_size}",
         f"--model_type={model_type}",
-        f"--split_digits=true",
-        f"--normalization_rule_name=nmt_nfkc_cf",
-        f"--add_dummy_prefix=false",
-        f"--remove_extra_whitespaces=true",
-        f"--pad_id=3",
-        f"--unk_id=0",
-        f"--bos_id=1",
-        f"--eos_id=2",
+        "--split_digits=true",
+        "--normalization_rule_name=nmt_nfkc_cf",
+        "--add_dummy_prefix=false",
+        "--remove_extra_whitespaces=true",
+        "--pad_id=3",
+        "--unk_id=0",
+        "--bos_id=1",
+        "--eos_id=2",
         # For potentially faster training:
         # f"--input_sentence_size=1000000", # Limit the size of the corpus used for training
         # f"--shuffle_input_sentence=true", # Shuffle the training data
@@ -63,6 +70,7 @@ def train_tokenizer(dataset_iterator, vocab_size=VOCAB_SIZE, save_path=TOKENIZER
     os.remove(temp_file)
 
     print(f"Tokenizer trained and saved to {save_path}")
+
 
 # --- Main Execution ---
 

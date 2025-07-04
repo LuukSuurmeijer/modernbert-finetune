@@ -1,50 +1,51 @@
-import os
 import math
+import os
 import shutil
+from pathlib import Path
+from typing import Any, Dict
+
 import torch
 import torch.nn as nn
-from transformers import (
-    AutoModelForMaskedLM,
-    AutoTokenizer,
-    AutoConfig,
-    get_linear_schedule_with_warmup,
-    DataCollatorForLanguageModeling,
-)
-from datasets import load_dataset
-from huggingface_hub import whoami, Repository
-from tqdm.auto import tqdm
-import wandb
+import yaml
 from adopt import ADOPT
-from typing import List, Dict, Any
+from datasets import load_dataset
+from dotenv import load_dotenv
+from huggingface_hub import Repository, whoami
+from tqdm.auto import tqdm
+from transformers import (AutoConfig, AutoModelForMaskedLM, AutoTokenizer,
+                          DataCollatorForLanguageModeling,
+                          get_linear_schedule_with_warmup)
 
-# --- Configuration ---
-model_checkpoint = "answerdotai/ModernBERT-base"
-dataset_name = "ssmits/fineweb-2-dutch"
-username = "ssmits"
-huggingface_token = os.environ.get("HUGGINGFACE_TOKEN", None)
-wandb_api_key = os.environ.get("WANDB_API_KEY", None)  # Optional
-tokenizer_path = "domain_tokenizer"  # Path to custom tokenizer directory
+import wandb
+
+from .config.config import TrainConfig
+
+load_dotenv()
+
+# --- Tokens ---
+HUGGINGFACE_TOKEN = os.environ.get("HUGGINGFACE_TOKEN", None)
+WANDB_API_KEY = os.environ.get("WANDB_API_KEY", None)
 
 # --- Dataset size (in rows) ---
 estimated_dataset_size_in_rows = 86_500_000
 
 # --- Training Config ---
-num_train_epochs = 1
-# Reduce or remove chunk size to allow for dynamic batching
-chunk_size = None  # Remove chunk size
-per_device_train_batch_size = 4
-gradient_accumulation_steps = 2
-eval_size_ratio = 0.05
-total_save_limit = 2
 
-effective_batch_size = per_device_train_batch_size * gradient_accumulation_steps
+with open(Path(__file__).resolve().parent / "config" / "train.yaml", "r") as f:
+    raw_cfg = yaml.safe_load(f)
+config = TrainConfig(**raw_cfg)
+
+# Example usage
+effective_batch_size = (
+    config.per_device_train_batch_size * config.gradient_accumulation_steps
+)
 total_steps_per_epoch = math.ceil(estimated_dataset_size_in_rows / effective_batch_size)
-total_train_steps = total_steps_per_epoch * num_train_epochs
-eval_size_per_chunk = int(100_000 * eval_size_ratio)
+total_train_steps = total_steps_per_epoch * config.num_train_epochs
+eval_size_per_chunk = int(100_000 * config.eval_size_ratio)
 
 # --- Testing Mode ---
 TESTING = False  # Set to True for testing, False for full training
-FLASH_ATTENTION = True
+FLASH_ATTENTION = False
 
 if TESTING:
     push_interval = 10_000
@@ -65,7 +66,6 @@ if FLASH_ATTENTION:
             subprocess.run(
                 ["pip", "install", "flash-attn", "--no-build-isolation"], check=True
             )
-            import flash_attn
 
             print("FlashAttention installed successfully.")
         except Exception as e:
@@ -82,54 +82,50 @@ except ImportError:
     print("FlashAttention is not available. Using standard attention.")
     flash_attn_available = False
 
-# --- Tokens ---
-huggingface_token = os.environ.get("HUGGINGFACE_TOKEN", None)
-wandb_api_key = os.environ.get("WANDB_API_KEY", None)
-
 # --- Initialize WandB ---
-if wandb_api_key is not None:
-    wandb.login(key=wandb_api_key)
+if WANDB_API_KEY is not None:
+    wandb.login(key=WANDB_API_KEY)
 else:
     wandb.login()
 
 wandb.init(
     project="modernbert-dutch",
-    name=f"{model_checkpoint.split('/')[-1]}-dutch-{'test' if TESTING else 'full'}",
+    name=f"{config.model_checkpoint.split('/')[-1]}-dutch-{'test' if TESTING else 'full'}",
 )
 
 # --- Load Tokenizer and Model ---
-print(f"Loading model and tokenizer from {model_checkpoint}...")
+print(f"Loading model and tokenizer from {config.model_checkpoint}...")
 
 # Check if custom tokenizer exists, otherwise use default
-if os.path.exists(tokenizer_path) and any(
-    fname.startswith("spm") for fname in os.listdir(tokenizer_path)
+if os.path.exists(config.tokenizer_path) and any(
+    fname.startswith("spm") for fname in os.listdir(config.tokenizer_path)
 ):
-    print(f"Loading custom SentencePiece tokenizer from {tokenizer_path}...")
-    from transformers import AutoTokenizer
-
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+    print(f"Loading custom SentencePiece tokenizer from {config.tokenizer_path}...")
+    tokenizer = AutoTokenizer.from_pretrained(config.tokenizer_path)
     # Add the pad_token if it's not already in the tokenizer
     if tokenizer.pad_token is None:
         tokenizer.add_special_tokens({"pad_token": "[PAD]"})
-        model.resize_token_embeddings(len(tokenizer))
-elif os.path.exists(tokenizer_path) and os.path.isfile(
-    os.path.join(tokenizer_path, "tokenizer.json")
+        tokenizer.resize_token_embeddings(len(tokenizer))
+elif os.path.exists(config.tokenizer_path) and os.path.isfile(
+    os.path.join(config.tokenizer_path, "tokenizer.json")
 ):
-    print(f"Loading custom tokenizer from {tokenizer_path}...")
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+    print(f"Loading custom tokenizer from {config.tokenizer_path}...")
+    tokenizer = AutoTokenizer.from_pretrained(config.tokenizer_path)
 else:
-    print(f"Using default tokenizer from {model_checkpoint}...")
+    print(f"Using default tokenizer from {config.model_checkpoint}...")
     tokenizer = AutoTokenizer.from_pretrained(
-        model_checkpoint, use_auth_token=huggingface_token
+        config.model_checkpoint, token=HUGGINGFACE_TOKEN
     )
 
-print(f"Loading model config from {model_checkpoint}...")
-config = AutoConfig.from_pretrained(model_checkpoint, use_auth_token=huggingface_token)
+print(f"Loading model config from {config.model_checkpoint}...")
+base_model_config = AutoConfig.from_pretrained(
+    config.model_checkpoint, token=HUGGINGFACE_TOKEN
+)
 config.torch_dtype = "float16"
 print(f"Model config loaded and modified: {config}")
 
 model = AutoModelForMaskedLM.from_pretrained(
-    model_checkpoint, config=config, use_auth_token=huggingface_token
+    config.model_checkpoint, config=base_model_config, token=HUGGINGFACE_TOKEN
 )
 print("Model and tokenizer loaded.")
 
@@ -142,12 +138,12 @@ if flash_attn_available:
     print("FlashAttention integrated.")
 
 # --- Load Dataset (Streaming) ---
-print(f"Loading dataset {dataset_name} (streaming)...")
+print(f"Loading dataset {config.dataset_name} (streaming)...")
 dataset = load_dataset(
-    dataset_name,
+    config.dataset_name,
     streaming=True,
     split="train",
-    use_auth_token=huggingface_token,
+    token=HUGGINGFACE_TOKEN,
 )
 print("Dataset loaded.")
 
@@ -173,12 +169,12 @@ print("Dataset tokenized.")
 # --- Set up Hugging Face Repository ---
 print("Setting up Hugging Face repository...")
 try:
-    user_info = whoami(token=huggingface_token)
+    user_info = whoami(token=HUGGINGFACE_TOKEN)
     username = user_info["name"]
 except Exception as e:
     print(f"Error fetching username: {e}. Using default username '{username}'.")
 
-model_name = model_checkpoint.split("/")[-1]
+model_name = config.model_checkpoint.split("/")[-1]
 output_dir = f"{model_name}-dutch-{'test' if TESTING else 'full'}"
 repo_name = f"{username}/{output_dir}"
 
@@ -189,7 +185,7 @@ repo = Repository(
     local_dir=output_dir,
     clone_from=repo_name,
     repo_type="model",
-    use_auth_token=huggingface_token,
+    token=HUGGINGFACE_TOKEN,
 )
 print(f"Repository '{repo_name}' set up at '{output_dir}'.")
 
@@ -251,7 +247,7 @@ def evaluate(model, eval_dataset, data_collator):
     """
     model.eval()
     losses = []
-    eval_iterator = eval_dataset.iter(batch_size=per_device_train_batch_size)
+    eval_iterator = eval_dataset.iter(batch_size=config.per_device_train_batch_size)
     for batch in tqdm(eval_iterator, desc="Evaluating"):
         with (
             torch.no_grad(),
@@ -318,10 +314,10 @@ def train_with_curriculum(mlm_probabilities, chunk_size_dataset):
     model.train()
     global_step = 0
 
-    for epoch in range(num_train_epochs):
+    for epoch in range(config.num_train_epochs):
         for i, mlm_probability in enumerate(mlm_probabilities):
             print(
-                f"\nEpoch {epoch + 1}/{num_train_epochs}, MLM Probability: {mlm_probability}"
+                f"\nEpoch {epoch + 1}/{config.num_train_epochs}, MLM Probability: {mlm_probability}"
             )
 
             data_collator = DynamicPaddingDataCollator(
@@ -337,7 +333,9 @@ def train_with_curriculum(mlm_probabilities, chunk_size_dataset):
                 eval_size_per_chunk
             )
 
-            train_iterator = train_dataset.iter(batch_size=per_device_train_batch_size)
+            train_iterator = train_dataset.iter(
+                batch_size=config.per_device_train_batch_size
+            )
             for step, batch in enumerate(
                 tqdm(train_iterator, desc=f"Training (MLM {mlm_probability})")
             ):
@@ -348,9 +346,9 @@ def train_with_curriculum(mlm_probabilities, chunk_size_dataset):
                     print(f"Training batch failed: {e}. Skipping.")
                     continue
 
-                scaler.scale(loss / gradient_accumulation_steps).backward()
+                scaler.scale(loss / config.gradient_accumulation_steps).backward()
 
-                if (step + 1) % gradient_accumulation_steps == 0:
+                if (step + 1) % config.gradient_accumulation_steps == 0:
                     scaler.step(optimizer)
                     scaler.update()
                     scheduler.step()
@@ -361,7 +359,9 @@ def train_with_curriculum(mlm_probabilities, chunk_size_dataset):
                     wandb.log({"loss": float(loss.item())}, step=global_step)
 
                     # Evaluation
-                    eval_interval = total_steps_per_epoch // (num_train_epochs * 4)
+                    eval_interval = total_steps_per_epoch // (
+                        config.num_train_epochs * 4
+                    )
                     if eval_interval > 0 and (global_step % eval_interval == 0):
                         eval_loss = evaluate(model, eval_dataset, data_collator)
                         print(f"Evaluation loss at step {global_step}: {eval_loss}")
@@ -383,7 +383,7 @@ def train_with_curriculum(mlm_probabilities, chunk_size_dataset):
     model.save_pretrained(output_dir)
     tokenizer.save_pretrained(output_dir)
     repo.push_to_hub(
-        commit_message=f"Final model - Epoch {num_train_epochs}", blocking=False
+        commit_message=f"Final model - Epoch {config.num_train_epochs}", blocking=False
     )
     print("Final model saved and pushed.")
 

@@ -1,13 +1,13 @@
 # -------- spm-tokenize.py PREFERRED OVER bpe-tokenize.py -------
 
+import os
+from itertools import islice
+
+from datasets import load_dataset
 from tokenizers import Tokenizer
 from tokenizers.models import WordPiece
 from tokenizers.pre_tokenizers import Whitespace
 from tokenizers.trainers import WordPieceTrainer
-from datasets import load_dataset
-from itertools import islice
-from transformers import AutoTokenizer
-import os
 
 # --- Configuration ---
 DATASET_NAME = "ssmits/fineweb-2-dutch"  # Dataset for tokenizer training

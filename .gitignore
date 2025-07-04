@@ -81,3 +81,9 @@ local_settings.py
 
 # UV
 uv.lock
+
+#wandb
+
+wandb/
+
+.pre-commit-config.yaml
