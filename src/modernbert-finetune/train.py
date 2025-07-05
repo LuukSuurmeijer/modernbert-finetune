@@ -12,19 +12,27 @@ from datasets import load_dataset
 from dotenv import load_dotenv
 from huggingface_hub import Repository, whoami
 from tqdm.auto import tqdm
-from transformers import (AutoConfig, AutoModelForMaskedLM, AutoTokenizer,
-                          DataCollatorForLanguageModeling,
-                          get_linear_schedule_with_warmup)
-
+from transformers import (
+    AutoConfig,
+    AutoModelForMaskedLM,
+    AutoTokenizer,
+    DataCollatorForLanguageModeling,
+    get_linear_schedule_with_warmup,
+)
+import sys
 import wandb
 
 from .config.config import TrainConfig
 
 load_dotenv()
 
+print("The script is running succesfully!")
+
+sys.exit()
+
 # --- Tokens ---
-HUGGINGFACE_TOKEN = os.environ.get("HUGGINGFACE_TOKEN", None)
-WANDB_API_KEY = os.environ.get("WANDB_API_KEY", None)
+HUGGINGFACE_TOKEN = os.getenv("HUGGINGFACE_TOKEN", None)
+WANDB_API_KEY = os.getenv("WANDB_API_KEY", None)
 
 # --- Dataset size (in rows) ---
 estimated_dataset_size_in_rows = 86_500_000
@@ -45,7 +53,7 @@ eval_size_per_chunk = int(100_000 * config.eval_size_ratio)
 
 # --- Testing Mode ---
 TESTING = False  # Set to True for testing, False for full training
-FLASH_ATTENTION = False
+FLASH_ATTENTION = eval(os.getenv("FLASH_ATTENTION", False))
 
 if TESTING:
     push_interval = 10_000
