@@ -41,9 +41,7 @@ def train_tokenizer(
 
     def batch_iterator(batch_size=BATCH_SIZE):
         for i in range(0, NUM_EXAMPLES_TO_TRAIN, batch_size):
-            yield [
-                item["content"] for item in islice(dataset_iterator, i, i + batch_size)
-            ]
+            yield [item["text"] for item in islice(dataset_iterator, i, i + batch_size)]
 
     tokenizer.train_from_iterator(
         batch_iterator(), trainer=trainer, length=NUM_EXAMPLES_TO_TRAIN
