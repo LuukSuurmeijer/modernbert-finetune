@@ -40,4 +40,4 @@ ssh-test:
     ssh -tt quineserver@192.168.178.208 copy-env
 
 run-docker:
-    docker run --rm --gpus all --env-file .env {{REPO_NAME}}
+    docker run --it --rm --gpus all

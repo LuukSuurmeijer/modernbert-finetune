@@ -28,8 +28,6 @@ load_dotenv()
 
 print("The script is running succesfully!")
 
-sys.exit()
-
 # --- Tokens ---
 HUGGINGFACE_TOKEN = os.getenv("HUGGINGFACE_TOKEN", None)
 WANDB_API_KEY = os.getenv("WANDB_API_KEY", None)
@@ -133,12 +131,16 @@ config.torch_dtype = "float16"
 print(f"Model config loaded and modified: {config}")
 
 model = AutoModelForMaskedLM.from_pretrained(
-    config.model_checkpoint, config=base_model_config, token=HUGGINGFACE_TOKEN
+    config.model_checkpoint,
+    config=base_model_config,
+    attn_implementation="eager",
+    torch_dtype=torch.float16,
+    token=HUGGINGFACE_TOKEN,
 )
 print("Model and tokenizer loaded.")
 
 # --- Integrate Flash-attn (if available) ---
-if flash_attn_available:
+if FLASH_ATTENTION:
     print("Replacing standard attention with FlashAttention...")
     for module in model.modules():
         if isinstance(module, nn.MultiheadAttention):

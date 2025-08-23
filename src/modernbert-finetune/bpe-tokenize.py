@@ -8,6 +8,7 @@ from tokenizers import Tokenizer
 from tokenizers.models import WordPiece
 from tokenizers.pre_tokenizers import Whitespace
 from tokenizers.trainers import WordPieceTrainer
+from transformers import PreTrainedTokenizerFast
 
 # --- Configuration ---
 DATASET_NAME = "ssmits/fineweb-2-dutch"  # Dataset for tokenizer training
@@ -47,6 +48,23 @@ def train_tokenizer(
         batch_iterator(), trainer=trainer, length=NUM_EXAMPLES_TO_TRAIN
     )
     tokenizer.save(os.path.join(save_path, "tokenizer.json"))
+
+    # Wrap it for use with transformers
+    wrapped_tokenizer = PreTrainedTokenizerFast(
+        tokenizer_file=os.path.join(save_path, "tokenizer.json"),
+        unk_token="[UNK]",
+        pad_token="[PAD]",
+        cls_token="[CLS]",
+        sep_token="[SEP]",
+        mask_token="[MASK]",
+    )
+
+    # Set tokenizer config explicitly (optional but recommended)
+    wrapped_tokenizer._tokenizer.model.save(save_path)  # Saves vocab.txt for WordPiece
+
+    # Save all necessary files to the directory
+    wrapped_tokenizer.save_pretrained(save_path)
+
     print(f"Tokenizer trained and saved to {save_path}")
     return tokenizer
 

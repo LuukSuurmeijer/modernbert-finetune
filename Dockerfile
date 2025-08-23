@@ -1,7 +1,13 @@
-FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
 
-RUN apt-get update && \
-    apt-get install -y curl build-essential pkg-config libssl-dev git
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y software-properties-common curl build-essential pkg-config libssl-dev git && \
+    add-apt-repository ppa:deadsnakes/ppa && \
+    apt-get update && apt-get install -y python3.10 python3.10-venv python3.10-dev python3.10-distutils && \
+    curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py && \
+    python3.10 get-pip.py && \
+    rm get-pip.py
 
 # Install Rust and just
 # RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
@@ -17,6 +23,9 @@ WORKDIR /modernbert-finetune
 
 COPY . .
 
+RUN apt-get install git-lfs && git lfs update --force && git lfs install
+
+
 # Upgrade pip and install uv
 RUN pip install --upgrade pip
 RUN pip install uv
@@ -24,7 +33,7 @@ RUN pip install uv
 # Install dependencies one by one with uv
 RUN uv pip install --system torch
 RUN uv pip install --system hatchling
-RUN uv pip install --system ".[cuda]"
+RUN uv pip install --system ".[cuda]" --no-build-isolation
 
 # Run your script to catch errors during build
-RUN python -m -u src.modernbert-finetune.train || echo "Training failed (expected on CPU-only build)"
+CMD ["python3", "-u", "-m", "src.modernbert-finetune.train"]
